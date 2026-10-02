@@ -10,6 +10,7 @@ import { TelemetryChart } from './components/TelemetryChart';
 import { EventDetailDrawer } from './components/EventDetailDrawer';
 import { ArchitectureModal } from './components/ArchitectureModal';
 import { api } from './api';
+import { soundFX } from './utils/soundEffects';
 import {
   GatewayStats, InterceptionDecision, AgentRecord, ApprovalItem,
   LedgerBlock, ScenarioFixture, HoneypotAsset, CheckpointSnapshot, MilestoneResult,
@@ -35,7 +36,7 @@ function Toast({ title, message, type, onClose }: {
         <div className="font-bold text-[10px] uppercase tracking-wider mb-0.5 opacity-90">{title}</div>
         <div className="text-[11px] leading-relaxed">{message}</div>
       </div>
-      <button onClick={onClose} className="opacity-60 hover:opacity-100 transition-opacity">
+      <button onClick={onClose} className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer">
         <X className="w-3.5 h-3.5" />
       </button>
     </div>
@@ -64,6 +65,9 @@ export function App() {
   const [replayResult, setReplayResult] = useState<any>(null);
   const [isRunningMilestones, setIsRunningMilestones] = useState(false);
   const [isTrafficGenerating, setIsTrafficGenerating] = useState(false);
+  const [trafficSpeed, setTrafficSpeed] = useState<number>(2000);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(false);
+  const [kpiFilter, setKpiFilter] = useState<string>('ALL');
   const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
   const [drawerDecision, setDrawerDecision] = useState<InterceptionDecision | null>(null);
   const [toasts, setToasts] = useState<Array<{ id: string; title: string; message: string; type: 'alert' | 'success' }>>([]);
@@ -74,6 +78,14 @@ export function App() {
     const id = `${Date.now()}-${Math.random()}`;
     setToasts((prev) => [...prev.slice(-2), { id, title, message, type }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 5000);
+  };
+
+  const handleToggleSound = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    soundFX.setEnabled(next);
+    if (next) soundFX.playAllow();
+    showToast('AUDIO FEEDBACK', next ? 'Live cyber audio cues enabled.' : 'Audio muted.', 'success');
   };
 
   const loadAllData = async () => {
@@ -120,11 +132,20 @@ export function App() {
           const decision = msg.data as InterceptionDecision;
           setInterceptions((prev) => [decision, ...prev.slice(0, 49)]);
           setSelectedInterception(decision);
+
+          // Audio sound cues
           if (decision.honeypot_triggered) {
+            soundFX.playHoney();
             showToast('🍯 DECEPTION TRIPWIRE BREACH', `Canary token touched by ${decision.agent_id}! Agent quarantined.`, 'alert');
           } else if (decision.decision === 'BLOCK') {
+            soundFX.playBlock();
             showToast('🛑 INVOCATION BLOCKED', `Pre-execution aborted for ${decision.tool_name} (${decision.agent_id}).`, 'alert');
+          } else if (decision.decision === 'REQUIRE_APPROVAL') {
+            soundFX.playWarn();
+          } else {
+            soundFX.playAllow();
           }
+
           api.getStats().then(setStats);
           api.getLedger(50).then(setLedgerBlocks);
           api.getAgents().then(setAgents);
@@ -136,6 +157,7 @@ export function App() {
           api.getApprovals().then(setApprovals);
           api.getStats().then(setStats);
           api.getLedger(50).then(setLedgerBlocks);
+          soundFX.playAllow();
           showToast('APPROVAL RESOLVED', `Action updated: ${msg.data.status}`, 'success');
         } else if (msg.event === 'CHECKPOINT_CREATED') {
           api.getCheckpoints().then(setCheckpoints);
@@ -159,16 +181,16 @@ export function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Continuous Dynamic Swarm Traffic Generator
+  // Continuous Dynamic Swarm Traffic Generator with adjustable speed
   useEffect(() => {
     if (!isTrafficGenerating) return;
     const interval = setInterval(async () => {
       try {
         await api.simulateTraffic();
       } catch (err) { /* ignore */ }
-    }, 3500);
+    }, trafficSpeed);
     return () => clearInterval(interval);
-  }, [isTrafficGenerating]);
+  }, [isTrafficGenerating, trafficSpeed]);
 
   // Handlers
   const handleSimulate = async (payload: any) => {
@@ -177,6 +199,15 @@ export function App() {
       const decision = await api.authorize(payload);
       setSelectedInterception(decision);
       setInterceptions((prev) => [decision, ...prev.slice(0, 49)]);
+
+      if (decision.honeypot_triggered) {
+        soundFX.playHoney();
+      } else if (decision.decision === 'BLOCK') {
+        soundFX.playBlock();
+      } else {
+        soundFX.playAllow();
+      }
+
       const [s, l, ag, ap] = await Promise.all([api.getStats(), api.getLedger(50), api.getAgents(), api.getApprovals()]);
       setStats(s); setLedgerBlocks(l); setAgents(ag); setApprovals(ap);
     } catch (e: any) {
@@ -190,6 +221,7 @@ export function App() {
     await api.quarantineAgent(agentId, 'Manual Security Analyst Action');
     setAgents(await api.getAgents());
     api.getStats().then(setStats);
+    soundFX.playBlock();
     showToast('AGENT QUARANTINED', `${agentId} placed under strict quarantine.`, 'alert');
   };
 
@@ -197,12 +229,14 @@ export function App() {
     await api.resetAgent(agentId);
     setAgents(await api.getAgents());
     api.getStats().then(setStats);
+    soundFX.playAllow();
     showToast('AGENT RESTORED', `${agentId} restored to HEALTHY status.`, 'success');
   };
 
   const handleBumpEpoch = async (agentId: string) => {
     const res = await api.bumpAgentEpoch(agentId);
     setAgents(await api.getAgents());
+    soundFX.playAllow();
     showToast('EPOCH BUMPED', `${agentId} bumped to Epoch v${res.new_epoch}. Tokens invalidated.`, 'success');
   };
 
@@ -211,6 +245,8 @@ export function App() {
       const res = await api.resolveApproval(approvalId, action, note);
       const [ap, l, s] = await Promise.all([api.getApprovals(), api.getLedger(50), api.getStats()]);
       setApprovals(ap); setLedgerBlocks(l); setStats(s);
+      if (action === 'APPROVE') soundFX.playAllow();
+      else soundFX.playBlock();
       showToast(action === 'APPROVE' ? 'EXECUTION APPROVED' : 'EXECUTION REJECTED', `Approval ${approvalId}: ${res.status}`, 'success');
     } catch (e: any) {
       showToast('RESOLVE ERROR', e.message, 'alert');
@@ -222,6 +258,8 @@ export function App() {
     try {
       const res = await api.verifyLedgerIntegrity();
       setLedgerVerification(res);
+      if (res.valid) soundFX.playAllow();
+      else soundFX.playBlock();
       showToast(
         res.valid ? 'INTEGRITY VERIFIED' : 'TAMPER DETECTED',
         `${res.verified_blocks} Blocks audited with 0 tamper. ${res.standard}`,
@@ -242,6 +280,8 @@ export function App() {
       const [s, l, i] = await Promise.all([api.getStats(), api.getLedger(50), api.getInterceptions(50)]);
       setStats(s); setLedgerBlocks(l); setInterceptions(i);
       if (res.decision) setSelectedInterception(res.decision);
+      if (res.deterministic_match) soundFX.playAllow();
+      else soundFX.playBlock();
       showToast(
         res.deterministic_match ? '✅ DETERMINISTIC MATCH' : '⚠️ MISMATCH',
         `${scenarioId}: Expected ${res.expected}, got ${res.actual}`,
@@ -257,6 +297,7 @@ export function App() {
   const handleCreateCheckpoint = async (name: string, description: string) => {
     const ckpt = await api.createCheckpoint(name, description);
     setCheckpoints((prev) => [ckpt, ...prev]);
+    soundFX.playAllow();
     showToast('CHECKPOINT COMMITTED', `Snapshot ${ckpt.checkpoint_id} at ledger #${ckpt.ledger_height}.`, 'success');
   };
 
@@ -264,6 +305,7 @@ export function App() {
     setIsRunningMilestones(true);
     try {
       setMilestones(await api.runMilestones());
+      soundFX.playAllow();
       showToast('MILESTONES EVALUATED', 'All security invariants M1–M5 verified.', 'success');
     } catch (e: any) {
       showToast('MILESTONE ERROR', e.message, 'alert');
@@ -279,6 +321,7 @@ export function App() {
       setPolicies(updated);
       const updatedStats = await api.getStats();
       setStats(updatedStats);
+      soundFX.playAllow();
       showToast('POLICY UPDATED', `${ruleId} ${enabled ? 'ARMED' : 'BYPASSED'} (Epoch v${res.policy_epoch}).`, 'success');
     } catch (err: any) {
       showToast('POLICY ERROR', err.message, 'alert');
@@ -288,6 +331,7 @@ export function App() {
   const handleToggleTraffic = () => {
     setIsTrafficGenerating((prev) => !prev);
     if (!isTrafficGenerating) {
+      soundFX.playAllow();
       showToast('DYNAMIC SWARM ACTIVE', 'Continuous agent mesh tool calls started.', 'success');
     } else {
       showToast('SWARM PAUSED', 'Traffic generator stopped.', 'success');
@@ -324,15 +368,26 @@ export function App() {
       {/* ── Main Dynamic Dashboard Body ── */}
       <main className="flex-1 w-full max-w-screen-2xl mx-auto px-4 md:px-6 py-5 space-y-4">
 
-        {/* Live KPI Metric Tiles */}
-        <KpiTiles stats={stats} />
+        {/* Live KPI Metric Tiles with Interactive Filter */}
+        <KpiTiles
+          stats={stats}
+          onSelectFilter={(filter) => {
+            setKpiFilter(filter);
+            if (activeTab !== 'command-center') setActiveTab('command-center');
+          }}
+          activeFilter={kpiFilter}
+        />
 
-        {/* Live Real-time Dynamic Telemetry Chart */}
+        {/* Live Real-time Dynamic Telemetry Chart & Speed Controller */}
         <TelemetryChart
           interceptions={interceptions}
           agents={agents}
           isTrafficGenerating={isTrafficGenerating}
           onToggleTraffic={handleToggleTraffic}
+          trafficSpeed={trafficSpeed}
+          onChangeSpeed={setTrafficSpeed}
+          soundEnabled={soundEnabled}
+          onToggleSound={handleToggleSound}
         />
 
         {/* Dynamic Tab Views */}

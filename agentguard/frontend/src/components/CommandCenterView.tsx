@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import {
   ShieldAlert, CheckCircle2, AlertTriangle, Clock, RotateCcw, Ban,
   ArrowUpRight, Fingerprint, Check, X, RefreshCw, Search, Activity,
-  Lock, Layers, Hexagon, ShieldCheck, Download, Zap
+  Lock, Layers, Hexagon, ShieldCheck, Download, Zap, Flame, Terminal
 } from 'lucide-react';
 import { InterceptionDecision, AgentRecord, ApprovalItem, LedgerBlock } from '../types';
+import { DynamicMeshRadar } from './DynamicMeshRadar';
+import { LiveAuditTerminal } from './LiveAuditTerminal';
 
 interface CommandCenterViewProps {
   interceptions: InterceptionDecision[];
@@ -21,7 +23,6 @@ interface CommandCenterViewProps {
   isVerifyingLedger: boolean;
   onQuickSimulate?: (payload: any) => void;
 }
-
 
 function DecisionBadge({ decision }: { decision: string }) {
   const cfg: Record<string, { cls: string; icon: React.ReactNode; label: string }> = {
@@ -56,13 +57,13 @@ function DecisionBadge({ decision }: { decision: string }) {
 }
 
 function RiskBar({ score }: { score: number }) {
-  const color = score >= 70 ? '#f87171' : score >= 40 ? '#fbbf24' : '#34d399';
+  const color = score >= 70 ? '#DC2626' : score >= 40 ? '#D97706' : '#059669';
   return (
     <div className="flex items-center gap-1.5">
-      <div className="w-12 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+      <div className="w-12 h-1.5 bg-[#D6CFC3] rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${score}%`, backgroundColor: color, boxShadow: `0 0 6px ${color}60` }}
+          style={{ width: `${score}%`, backgroundColor: color }}
         />
       </div>
       <span className="text-[10px] font-mono font-bold" style={{ color }}>{score}</span>
@@ -87,7 +88,9 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
 }) => {
   const [filterTool, setFilterTool] = useState('');
   const [filterDecision, setFilterDecision] = useState<string>('ALL');
+  const [selectedAgentFilter, setSelectedAgentFilter] = useState<string | null>(null);
   const [approvalNote, setApprovalNote] = useState<Record<string, string>>({});
+  const [isStormRunning, setIsStormRunning] = useState(false);
 
   const filtered = interceptions.filter((item) => {
     const matchesText =
@@ -95,7 +98,8 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
       item.agent_id.toLowerCase().includes(filterTool.toLowerCase()) ||
       item.trace_id.toLowerCase().includes(filterTool.toLowerCase());
     const matchesDecision = filterDecision === 'ALL' || item.decision === filterDecision;
-    return matchesText && matchesDecision;
+    const matchesAgent = !selectedAgentFilter || item.agent_id === selectedAgentFilter;
+    return matchesText && matchesDecision && matchesAgent;
   });
 
   const handleExportInterceptions = () => {
@@ -116,6 +120,43 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
     a.download = `agentguard-ledger-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Run a 3-stage automated threat storm to demonstrate real-time dynamic mitigation
+  const handleRunThreatStorm = async () => {
+    if (!onQuickSimulate || isStormRunning) return;
+    setIsStormRunning(true);
+
+    const threats = [
+      {
+        agent_id: 'crawler-03',
+        tool_name: 'read_file',
+        arguments: { path: '/etc/secrets/aws_canary_key' },
+        task_id: 'TASK-STORM-01',
+        trace_id: `TRC-STORM-CANARY-${Date.now().toString().slice(-4)}`,
+      },
+      {
+        agent_id: 'researcher-01',
+        tool_name: 'read_file',
+        arguments: { path: '../../etc/shadow' },
+        task_id: 'TASK-STORM-02',
+        trace_id: `TRC-STORM-TRAV-${Date.now().toString().slice(-4)}`,
+      },
+      {
+        agent_id: 'external-scout',
+        tool_name: 'execute_code',
+        arguments: { code: 'import os; os.system("cat /etc/passwd")' },
+        task_id: 'TASK-STORM-03',
+        trace_id: `TRC-STORM-RCE-${Date.now().toString().slice(-4)}`,
+      },
+    ];
+
+    for (let i = 0; i < threats.length; i++) {
+      onQuickSimulate(threats[i]);
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    }
+
+    setIsStormRunning(false);
   };
 
   const quickThreats = [
@@ -179,6 +220,15 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
   return (
     <div className="space-y-4 tab-enter">
 
+      {/* ── Dynamic Swarm Radar & Topology ── */}
+      <DynamicMeshRadar
+        agents={agents}
+        latestInterception={interceptions.length > 0 ? interceptions[0] : null}
+        selectedAgentId={selectedAgentFilter}
+        onSelectAgent={setSelectedAgentFilter}
+        onQuickSimulate={onQuickSimulate}
+      />
+
       {/* ── Quick Threat Trigger Bar ── */}
       {onQuickSimulate && (
         <div
@@ -202,6 +252,19 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
                 {qt.label}
               </button>
             ))}
+
+            <button
+              onClick={handleRunThreatStorm}
+              disabled={isStormRunning}
+              className={`px-3 py-1 rounded-lg text-[10px] font-mono font-bold border transition-all hover-lift cursor-pointer flex items-center gap-1.5 ${
+                isStormRunning
+                  ? 'bg-red-100 text-red-900 border-red-300 animate-pulse'
+                  : 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100'
+              }`}
+            >
+              <Flame className="w-3.5 h-3.5 text-red-600" />
+              <span>{isStormRunning ? 'Simulating Storm…' : 'Trigger Threat Storm (3-Step)'}</span>
+            </button>
           </div>
         </div>
       )}
@@ -222,6 +285,11 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
               <span className="text-[9px] font-mono px-2 py-0.5 rounded-full border" style={{ background: '#E2DBD0', borderColor: '#D6CFC3', color: '#7A6F62' }}>
                 {filtered.length} events
               </span>
+              {selectedAgentFilter && (
+                <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                  agent: {selectedAgentFilter}
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -250,7 +318,7 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
                   placeholder="Filter events…"
                   value={filterTool}
                   onChange={(e) => setFilterTool(e.target.value)}
-                  className="input-cyber text-[10px] pl-7 pr-2.5 py-1 rounded-lg w-36"
+                  className="input-cyber text-[10px] pl-7 pr-2.5 py-1 rounded-lg w-32"
                 />
               </div>
 
@@ -276,7 +344,9 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
                 <div
                   key={`${item.trace_id}-${idx}`}
                   onClick={() => onSelectInterception(item)}
-                  className="group relative flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-all duration-150 hover-lift"
+                  className={`group relative flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-all duration-150 hover-lift ${
+                    idx === 0 ? 'anim-event-flash' : ''
+                  }`}
                   style={
                     item.decision === 'BLOCK'
                       ? { background: 'rgba(239,68,68,0.06)', borderColor: 'rgba(239,68,68,0.3)' }
@@ -391,7 +461,7 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
                   </div>
 
                   {app.status === 'PENDING' && (
-                    <div className="space-y-2 pt-2 border-t border-white/[0.06]">
+                    <div className="space-y-2 pt-2 border-t border-[#D6CFC3]">
                       <input
                         type="text"
                         placeholder="Analyst note (optional)…"
@@ -402,14 +472,14 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
                       <div className="flex gap-2">
                         <button
                           onClick={() => onResolveApproval(app.approval_id, 'APPROVE', approvalNote[app.approval_id] || '')}
-                          className="btn-success flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px]"
+                          className="btn-success flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold cursor-pointer"
                         >
                           <Check className="w-3.5 h-3.5" />
                           Approve
                         </button>
                         <button
                           onClick={() => onResolveApproval(app.approval_id, 'REJECT', approvalNote[app.approval_id] || '')}
-                          className="btn-danger flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px]"
+                          className="btn-danger flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold cursor-pointer"
                         >
                           <X className="w-3.5 h-3.5" />
                           Reject
@@ -438,7 +508,7 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
                 Agent Identity Roster
               </span>
             </div>
-            <span className="text-[10px] font-mono" style={{ color: '#7A6F62' }}>Ed25519 Token Bound</span>
+            <span className="text-[10px] font-mono text-[#7A6F62]">Ed25519 Token Bound</span>
           </div>
 
           <div className="space-y-3">
@@ -475,7 +545,7 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-4 mt-1.5 text-[10px] font-mono" style={{ color: '#7A6F62' }}>
+                    <div className="flex items-center gap-4 mt-1.5 text-[10px] font-mono text-[#7A6F62]">
                       <span>Role: <strong style={{ color: '#3D3529' }}>{ag.role}</strong></span>
                       <span>Epoch: <strong style={{ color: '#2563EB' }}>v{ag.security_epoch}</strong></span>
                       <span>Blocked: <strong style={{ color: ag.blocked_count > 0 ? '#B91C1C' : '#5C5245' }}>{ag.blocked_count}</strong></span>
@@ -487,7 +557,7 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
                       </div>
                     )}
 
-                    <div className="mt-2 text-[9px] font-mono truncate" style={{ color: '#8A7E70' }}>
+                    <div className="mt-2 text-[9px] font-mono truncate text-[#7A6F62]">
                       Scope: {ag.allowed_tools.join(', ')}
                     </div>
                   </div>
@@ -496,21 +566,21 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
                     {ag.status === 'QUARANTINED' ? (
                       <button
                         onClick={() => onResetAgent(ag.agent_id)}
-                        className="btn-success flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px]"
+                        className="btn-success flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold cursor-pointer"
                       >
                         <RotateCcw className="w-3 h-3" /> Reset
                       </button>
                     ) : (
                       <button
                         onClick={() => onQuarantineAgent(ag.agent_id)}
-                        className="btn-danger flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px]"
+                        className="btn-danger flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold cursor-pointer"
                       >
                         <Ban className="w-3 h-3" /> Quarantine
                       </button>
                     )}
                     <button
                       onClick={() => onBumpEpoch(ag.agent_id)}
-                      className="btn-primary flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px]"
+                      className="btn-primary flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold cursor-pointer"
                     >
                       <RefreshCw className="w-3 h-3" /> Bump Epoch
                     </button>
@@ -544,7 +614,7 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
               <button
                 onClick={onVerifyLedger}
                 disabled={isVerifyingLedger}
-                className="btn-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] disabled:opacity-50"
+                className="btn-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold disabled:opacity-50 cursor-pointer"
               >
                 <RefreshCw className={`w-3 h-3 ${isVerifyingLedger ? 'animate-spin' : ''}`} />
                 Verify Chain
@@ -610,6 +680,10 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* ── Row 3: Live RFC-5424 Syslog Terminal ── */}
+      <LiveAuditTerminal interceptions={interceptions} isOpenDefault={true} />
+
     </div>
   );
 };

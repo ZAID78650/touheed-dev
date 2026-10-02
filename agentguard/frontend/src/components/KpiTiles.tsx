@@ -4,6 +4,8 @@ import { GatewayStats } from '../types';
 
 interface KpiTilesProps {
   stats: GatewayStats | null;
+  onSelectFilter?: (filter: string) => void;
+  activeFilter?: string;
 }
 
 function AnimatedNumber({ value, suffix = '' }: { value: number | string; suffix?: string }) {
@@ -36,6 +38,7 @@ function AnimatedNumber({ value, suffix = '' }: { value: number | string; suffix
 const KPI_CONFIG = [
   {
     key: 'post_block_execution_rate',
+    filterValue: 'ALL',
     label: 'Post-Block Rate',
     sublabel: 'FR-1 Invariant Lock',
     icon: ShieldCheck,
@@ -48,6 +51,7 @@ const KPI_CONFIG = [
   },
   {
     key: 'total_intercepted',
+    filterValue: 'ALL',
     label: 'Total Interceptions',
     sublabel: 'Pre-execution inspected',
     icon: Zap,
@@ -60,6 +64,7 @@ const KPI_CONFIG = [
   },
   {
     key: 'blocked_count',
+    filterValue: 'BLOCK',
     label: 'Blocked Invocations',
     sublabel: 'Short-circuit at gateway',
     icon: Ban,
@@ -72,6 +77,7 @@ const KPI_CONFIG = [
   },
   {
     key: 'pending_approvals_count',
+    filterValue: 'REQUIRE_APPROVAL',
     label: 'Pending Approvals',
     sublabel: 'Human cockpit review',
     icon: Clock,
@@ -84,6 +90,7 @@ const KPI_CONFIG = [
   },
   {
     key: 'total_agents',
+    filterValue: 'ALL',
     label: 'Agent Mesh',
     sublabel: 'Circuit breaker active',
     icon: Users,
@@ -96,6 +103,7 @@ const KPI_CONFIG = [
   },
   {
     key: 'ledger_height',
+    filterValue: 'ALL',
     label: 'Ledger Height',
     sublabel: 'RFC-8785 SHA-256',
     icon: Database,
@@ -108,7 +116,7 @@ const KPI_CONFIG = [
   },
 ];
 
-export const KpiTiles: React.FC<KpiTilesProps> = ({ stats }) => {
+export const KpiTiles: React.FC<KpiTilesProps> = ({ stats, onSelectFilter, activeFilter }) => {
   const blockRate = stats ? (stats.blocked_count / Math.max(stats.total_intercepted, 1)) * 100 : 0;
 
   return (
@@ -117,25 +125,31 @@ export const KpiTiles: React.FC<KpiTilesProps> = ({ stats }) => {
         const Icon = cfg.icon;
         const rawValue = stats ? (stats as any)[cfg.key] : null;
         const displayValue = rawValue !== null ? rawValue : '—';
+        const isFilterActive = activeFilter && cfg.filterValue === activeFilter && cfg.filterValue !== 'ALL';
 
         return (
           <div
             key={cfg.key}
-            className="relative rounded-xl border p-4 overflow-hidden hover-lift cursor-default"
+            onClick={() => onSelectFilter && onSelectFilter(cfg.filterValue)}
+            className={`relative rounded-xl border p-4 overflow-hidden hover-lift transition-all duration-200 select-none ${
+              onSelectFilter ? 'cursor-pointer' : 'cursor-default'
+            }`}
             style={{
-              background: '#EDE8DE',
-              borderColor: cfg.borderColor,
-              boxShadow: '0 2px 8px rgba(100, 85, 70, 0.06)',
+              background: isFilterActive ? '#FAF7F2' : '#EDE8DE',
+              borderColor: isFilterActive ? '#059669' : cfg.borderColor,
+              boxShadow: isFilterActive
+                ? '0 0 12px rgba(5,150,105,0.18)'
+                : '0 2px 8px rgba(100, 85, 70, 0.06)',
             }}
           >
             {/* Header row */}
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-mono font-semibold uppercase tracking-widest" style={{ color: '#7A6F62' }}>
+              <span className="text-[10px] font-mono font-semibold uppercase tracking-widest text-[#7A6F62]">
                 {cfg.label}
               </span>
               <div
                 className="w-6 h-6 rounded-lg flex items-center justify-center border"
-                style={{ background: '#E2DBD0', borderColor: '#D6CFC3' }}
+                style={{ background: '#FAF7F2', borderColor: '#D6CFC3' }}
               >
                 <Icon className="w-3.5 h-3.5" style={{ color: cfg.iconColor }} />
               </div>
@@ -151,7 +165,7 @@ export const KpiTiles: React.FC<KpiTilesProps> = ({ stats }) => {
                 <span>
                   <AnimatedNumber value={stats.total_agents} />
                   {stats.quarantined_agents_count > 0 && (
-                    <span className="text-red-600 text-sm ml-1.5">-{stats.quarantined_agents_count}</span>
+                    <span className="text-red-600 text-sm ml-1.5 font-bold">-{stats.quarantined_agents_count}</span>
                   )}
                 </span>
               ) : (
@@ -172,7 +186,7 @@ export const KpiTiles: React.FC<KpiTilesProps> = ({ stats }) => {
             )}
 
             {/* Sub-label */}
-            <div className="flex items-center gap-1.5 text-[9px] font-mono" style={{ color: '#8A7E70' }}>
+            <div className="flex items-center gap-1.5 text-[9px] font-mono text-[#7A6F62]">
               {cfg.dot && (
                 <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} ${cfg.pulseClass}`} />
               )}
