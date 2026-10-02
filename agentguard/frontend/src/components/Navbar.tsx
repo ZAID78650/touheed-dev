@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Activity, Cpu, GitBranch, History, Radio, Lock } from 'lucide-react';
+import { Shield, Activity, Cpu, GitBranch, History, Radio, Lock, ShieldCheck, BookOpen } from 'lucide-react';
 
 interface NavbarProps {
-  activeTab: 'command-center' | 'pipeline' | 'attack-lab' | 'checkpoints';
-  setActiveTab: (tab: 'command-center' | 'pipeline' | 'attack-lab' | 'checkpoints') => void;
+  activeTab: 'command-center' | 'pipeline' | 'attack-lab' | 'checkpoints' | 'policies';
+  setActiveTab: (tab: 'command-center' | 'pipeline' | 'attack-lab' | 'checkpoints' | 'policies') => void;
   isConnected: boolean;
   ledgerHeight: number;
   isTrafficGenerating?: boolean;
   onToggleTraffic?: () => void;
+  onOpenArchitecture?: () => void;
 }
 
 const TABS = [
   { id: 'command-center' as const, label: 'Command Center', icon: Activity },
   { id: 'pipeline'       as const, label: '20-Stage Pipeline', icon: Cpu },
+  { id: 'policies'       as const, label: 'Security Policies', icon: ShieldCheck },
   { id: 'attack-lab'     as const, label: 'Attack Lab',      icon: GitBranch },
   { id: 'checkpoints'    as const, label: 'Checkpoints',     icon: History },
 ];
@@ -24,7 +26,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   ledgerHeight,
   isTrafficGenerating = false,
   onToggleTraffic,
+  onOpenArchitecture,
 }) => {
+
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
@@ -238,6 +242,31 @@ export const Navbar: React.FC<NavbarProps> = ({
               />
               {isConnected ? 'WS LIVE' : 'POLLING'}
             </div>
+
+            {/* Security Specs / Threat Model Button */}
+            {onOpenArchitecture && (
+              <button
+                onClick={onOpenArchitecture}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-mono font-semibold border transition-all duration-200 cursor-pointer"
+                style={{
+                  background: '#EDE8DE',
+                  borderColor: '#D6CFC3',
+                  color: '#4B4237',
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = '#FAF7F2';
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = '#B8AE9F';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = '#EDE8DE';
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = '#D6CFC3';
+                }}
+                title="View Zero-Bypass Specification & Security Architecture"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-emerald-700" />
+                <span className="hidden sm:inline">Threat Specs</span>
+              </button>
+            )}
 
             {/* Ledger counter */}
             <div

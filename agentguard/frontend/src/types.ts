@@ -154,3 +154,14 @@ export interface HoneypotAsset {
   status: string;
   action_on_touch: string;
 }
+
+export interface PolicyRule {
+  rule_id: string;
+  name: string;
+  cel_expression: string;
+  decision: DecisionType;
+  priority: number;
+  description: string;
+  enabled: boolean;
+}
+

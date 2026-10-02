@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   ShieldAlert, CheckCircle2, AlertTriangle, Clock, RotateCcw, Ban,
   ArrowUpRight, Fingerprint, Check, X, RefreshCw, Search, Activity,
-  Lock, Layers, Hexagon, ShieldCheck
+  Lock, Layers, Hexagon, ShieldCheck, Download, Zap
 } from 'lucide-react';
 import { InterceptionDecision, AgentRecord, ApprovalItem, LedgerBlock } from '../types';
 
@@ -19,7 +19,9 @@ interface CommandCenterViewProps {
   onVerifyLedger: () => void;
   ledgerVerification: any;
   isVerifyingLedger: boolean;
+  onQuickSimulate?: (payload: any) => void;
 }
+
 
 function DecisionBadge({ decision }: { decision: string }) {
   const cfg: Record<string, { cls: string; icon: React.ReactNode; label: string }> = {
@@ -81,25 +83,135 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
   onVerifyLedger,
   ledgerVerification,
   isVerifyingLedger,
+  onQuickSimulate,
 }) => {
   const [filterTool, setFilterTool] = useState('');
+  const [filterDecision, setFilterDecision] = useState<string>('ALL');
   const [approvalNote, setApprovalNote] = useState<Record<string, string>>({});
 
-  const filtered = interceptions.filter((item) =>
-    item.tool_name.toLowerCase().includes(filterTool.toLowerCase()) ||
-    item.agent_id.toLowerCase().includes(filterTool.toLowerCase()) ||
-    item.trace_id.toLowerCase().includes(filterTool.toLowerCase())
-  );
+  const filtered = interceptions.filter((item) => {
+    const matchesText =
+      item.tool_name.toLowerCase().includes(filterTool.toLowerCase()) ||
+      item.agent_id.toLowerCase().includes(filterTool.toLowerCase()) ||
+      item.trace_id.toLowerCase().includes(filterTool.toLowerCase());
+    const matchesDecision = filterDecision === 'ALL' || item.decision === filterDecision;
+    return matchesText && matchesDecision;
+  });
+
+  const handleExportInterceptions = () => {
+    const blob = new Blob([JSON.stringify(interceptions, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `agentguard-events-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportLedger = () => {
+    const blob = new Blob([JSON.stringify(ledgerBlocks, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `agentguard-ledger-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const quickThreats = [
+    {
+      label: '🍯 Canary Probe',
+      desc: 'Trips deception token',
+      payload: {
+        agent_id: 'crawler-03',
+        tool_name: 'read_file',
+        arguments: { path: '/etc/secrets/aws_canary_key' },
+        task_id: 'TASK-CANARY-01',
+        trace_id: `TRC-CANARY-${Date.now().toString().slice(-4)}`,
+      },
+    },
+    {
+      label: '📁 Path Traversal',
+      desc: '../../etc/shadow escape',
+      payload: {
+        agent_id: 'researcher-01',
+        tool_name: 'read_file',
+        arguments: { path: '../../etc/shadow' },
+        task_id: 'TASK-TRAVERSAL-02',
+        trace_id: `TRC-TRAV-${Date.now().toString().slice(-4)}`,
+      },
+    },
+    {
+      label: '💻 Dynamic RCE',
+      desc: 'Arbitrary code execution gate',
+      payload: {
+        agent_id: 'researcher-01',
+        tool_name: 'execute_code',
+        arguments: { code: 'import os; os.system("id")' },
+        task_id: 'TASK-RCE-03',
+        trace_id: `TRC-RCE-${Date.now().toString().slice(-4)}`,
+      },
+    },
+    {
+      label: '💉 SQL Tautology',
+      desc: "SQLi ' OR 1=1 bypass",
+      payload: {
+        agent_id: 'data-pipeline',
+        tool_name: 'query_db',
+        arguments: { query: "SELECT * FROM users WHERE id = 1 OR '1'='1' --" },
+        task_id: 'TASK-SQLI-04',
+        trace_id: `TRC-SQLI-${Date.now().toString().slice(-4)}`,
+      },
+    },
+    {
+      label: '📄 Safe Read',
+      desc: 'Clean verified payload',
+      payload: {
+        agent_id: 'researcher-01',
+        tool_name: 'read_file',
+        arguments: { path: '/docs/whitepaper.pdf' },
+        task_id: 'TASK-CLEAN-05',
+        trace_id: `TRC-SAFE-${Date.now().toString().slice(-4)}`,
+      },
+    },
+  ];
 
   return (
     <div className="space-y-4 tab-enter">
+
+      {/* ── Quick Threat Trigger Bar ── */}
+      {onQuickSimulate && (
+        <div
+          className="rounded-xl border px-4 py-2.5 flex flex-wrap items-center justify-between gap-3"
+          style={{ background: '#EDE8DE', borderColor: '#D6CFC3' }}
+        >
+          <div className="flex items-center gap-2 text-xs font-mono font-bold" style={{ color: '#1E232A' }}>
+            <Zap className="w-3.5 h-3.5 text-amber-600" />
+            <span>Instant Threat Simulation:</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {quickThreats.map((qt) => (
+              <button
+                key={qt.label}
+                onClick={() => onQuickSimulate(qt.payload)}
+                className="px-2.5 py-1 rounded-lg text-[10px] font-mono font-semibold border transition-all hover-lift cursor-pointer"
+                style={{ background: '#FAF7F2', borderColor: '#D6CFC3', color: '#3D3529' }}
+                title={qt.desc}
+              >
+                {qt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Row 1: Interceptions + Approvals ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
 
         {/* Interceptions Stream (7 cols) */}
-        {/* Interceptions Stream (7 cols) */}
         <div className="lg:col-span-7 rounded-xl border flex flex-col h-[540px] overflow-hidden" style={{ background: '#EDE8DE', borderColor: '#D6CFC3' }}>
-          <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: '#D6CFC3' }}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-3 border-b gap-2" style={{ borderColor: '#D6CFC3' }}>
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center">
                 <ShieldAlert className="w-3.5 h-3.5 text-red-500" />
@@ -111,15 +223,44 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
                 {filtered.length} events
               </span>
             </div>
-            <div className="relative">
-              <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: '#8A7E70' }} />
-              <input
-                type="text"
-                placeholder="Filter agent / tool / trace…"
-                value={filterTool}
-                onChange={(e) => setFilterTool(e.target.value)}
-                className="input-cyber text-[11px] pl-7 pr-3 py-1.5 rounded-lg w-52"
-              />
+
+            <div className="flex items-center gap-2">
+              {/* Decision filter chips */}
+              <div className="flex items-center gap-1">
+                {(['ALL', 'BLOCK', 'REQUIRE_APPROVAL', 'WARN', 'ALLOW'] as const).map((dec) => (
+                  <button
+                    key={dec}
+                    onClick={() => setFilterDecision(dec)}
+                    className="px-2 py-0.5 rounded text-[9px] font-mono font-semibold transition-all border cursor-pointer"
+                    style={
+                      filterDecision === dec
+                        ? { background: '#FAF7F2', borderColor: '#B8AE9F', color: '#1E232A' }
+                        : { background: '#E4DDD2', borderColor: '#D6CFC3', color: '#7A6F62' }
+                    }
+                  >
+                    {dec === 'REQUIRE_APPROVAL' ? 'APPR' : dec}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative">
+                <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: '#8A7E70' }} />
+                <input
+                  type="text"
+                  placeholder="Filter events…"
+                  value={filterTool}
+                  onChange={(e) => setFilterTool(e.target.value)}
+                  className="input-cyber text-[10px] pl-7 pr-2.5 py-1 rounded-lg w-36"
+                />
+              </div>
+
+              <button
+                onClick={handleExportInterceptions}
+                className="w-7 h-7 rounded-lg border border-[#D6CFC3] bg-[#FAF7F2] flex items-center justify-center text-slate-700 hover:text-black cursor-pointer"
+                title="Export Stream as JSON"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
 
@@ -391,14 +532,24 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
                 Cryptographic Ledger (FR-18)
               </span>
             </div>
-            <button
-              onClick={onVerifyLedger}
-              disabled={isVerifyingLedger}
-              className="btn-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3 h-3 ${isVerifyingLedger ? 'animate-spin' : ''}`} />
-              Verify Chain
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportLedger}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-mono border border-[#D6CFC3] bg-[#FAF7F2] text-slate-700 hover:text-black cursor-pointer"
+                title="Export Entire Ledger Chain as JSON"
+              >
+                <Download className="w-3 h-3" />
+                <span>Export</span>
+              </button>
+              <button
+                onClick={onVerifyLedger}
+                disabled={isVerifyingLedger}
+                className="btn-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3 h-3 ${isVerifyingLedger ? 'animate-spin' : ''}`} />
+                Verify Chain
+              </button>
+            </div>
           </div>
 
           {ledgerVerification && (
